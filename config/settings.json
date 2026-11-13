@@ -1,0 +1,33 @@
+{
+  "request": {
+    "timeout": 15,
+    "workers": 12,
+    "retries": 1,
+    "max_bytes": 8388608,
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Honeybee/2.0"
+  },
+  "collect": {
+    "max_entries_per_source": 3000
+  },
+  "clean": {
+    "allowed_protocols": [
+      "shadowsocks",
+      "vmess",
+      "vless",
+      "trojan",
+      "hysteria2",
+      "tuic",
+      "anytls",
+      "socks",
+      "http"
+    ],
+    "max_tag_length": 120,
+    "drop_private_server": true,
+    "drop_reserved_ports": true,
+    "max_nodes": 30000
+  },
+  "split": {
+    "max_per_file": 500,
+    "prefix": "honeybee"
+  }
+}

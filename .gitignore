@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+.mypy_cache/
+
+# 本地运行产物与缓存（压缩包本身要提交，见下方例外）
+*.tar.gz
+!sub/sub.tar.gz
+*.zip
+*.bak
+*.log
+*.tmp
+tmp/
+dist/
+
+# 旧流水线遗留的生成数据，一律不再入库
+sub/*.json
+sub/*.yaml
+sub/*.yml
+sub/*.txt
+sub/split_*
+sing-box-sub/localurl*.txt
+sing-box-sub/temp_links.json
+
+# 二进制工具：运行时下载，不提交
+/sing-box
+/sing-box-*/
+/clash2singbox
+*.mmdb
+*.deb
+
+# 系统
+.DS_Store
+Thumbs.db

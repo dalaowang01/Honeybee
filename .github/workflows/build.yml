@@ -1,0 +1,109 @@
+name: build
+
+# Honeybee 唯一的流水线。
+# 收集 -> 清理 -> 验证 -> 拆分 -> sing-box JSON -> 压缩成单个文件。
+#
+# 触发范围被严格限定在源码/配置/本文件：产物 sub/sub.tar.gz 的自动回写
+# 不会再次触发流水线；也不再使用 workflow_run 串联多个工作流，避免连锁风暴。
+on:
+  schedule:
+    - cron: '20 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      max_per_file:
+        description: '每个 JSON 分片的最大节点数'
+        required: false
+        default: '500'
+      dry_run:
+        description: '只构建和校验，不写回仓库'
+        type: boolean
+        required: false
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'honeybee/**'
+      - 'config/**'
+      - 'tests/**'
+      - 'requirements.txt'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'honeybee/**'
+      - 'config/**'
+      - 'tests/**'
+      - 'requirements.txt'
+      - '.github/workflows/build.yml'
+
+concurrency:
+  group: honeybee-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Build subscription bundle
+        run: |
+          python -m honeybee build \
+            --output sub/sub.tar.gz \
+            --max-per-file "${{ inputs.max_per_file || '500' }}"
+
+      - name: Inspect bundle
+        run: python -m honeybee inspect --input sub/sub.tar.gz
+
+      # 官方二进制只在运行时下载，不入库；下载失败时静态校验已足够，不阻塞构建。
+      - name: Verify with official sing-box
+        run: |
+          if curl -fsSL --max-time 120 -o /tmp/sing-box.tar.gz \
+            https://github.com/SagerNet/sing-box/releases/download/v1.12.1/sing-box-1.12.1-linux-amd64.tar.gz; then
+            tar xzf /tmp/sing-box.tar.gz -C /tmp
+            python -m honeybee verify-bundle \
+              --input sub/sub.tar.gz \
+              --sing-box /tmp/sing-box-1.12.1-linux-amd64/sing-box
+          else
+            echo "sing-box download failed; static verification already passed"
+          fi
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: honeybee-bundle
+          path: sub/sub.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+      # 用 GITHUB_TOKEN 推送的提交不会触发新的 workflow（GitHub 的防循环规则），
+      # 再加上上面的 paths 过滤，产物更新不会再拉起任何流水线。
+      - name: Commit bundle
+        if: github.event_name != 'pull_request' && inputs.dry_run != true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sub/sub.tar.gz
+          if git diff --cached --quiet; then
+            echo "Bundle unchanged, nothing to commit."
+          else
+            git commit -m "chore: update subscription bundle"
+            git push
+          fi
